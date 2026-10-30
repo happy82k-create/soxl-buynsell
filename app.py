@@ -16,10 +16,10 @@ from trend import SOXX_PATH, build_soxx_card, load_soxx_weekly, read_soxx_meta, 
 st.set_page_config(page_title="SOXL 매수 매도 타점", layout="wide")
 
 STAMP_STYLE = {
-    "1차": {"symbol": "triangle-up", "color": "#1d4ed8", "side": "low"},
-    "2차": {"symbol": "triangle-up", "color": "#0e7490", "side": "low"},
-    "3차": {"symbol": "triangle-up", "color": "#6d28d9", "side": "low"},
-    "매도": {"symbol": "triangle-down", "color": "#9a3412", "side": "high"},
+    "1차": {"symbol": "triangle-up", "color": "#d4af37", "line": "#8a6d12", "side": "low", "size": 16},
+    "2차": {"symbol": "triangle-up", "color": "#d4af37", "line": "#8a6d12", "side": "low", "size": 16},
+    "3차": {"symbol": "triangle-up", "color": "#d4af37", "line": "#8a6d12", "side": "low", "size": 16},
+    "매도": {"symbol": "square", "color": "#ffe14a", "line": "#c9a000", "side": "high", "size": 16},
 }
 
 
@@ -176,29 +176,51 @@ def make_chart(view: pd.DataFrame) -> go.Figure:
                 name=stamp,
                 text=[stamp] * len(part),
                 textposition="bottom center" if style["side"] == "low" else "top center",
-                textfont={"color": style["color"], "size": 12},
-                marker={"symbol": style["symbol"], "size": 12, "color": style["color"]},
+                textfont={"color": style["line"], "size": style["size"]},
+                marker={
+                    "symbol": style["symbol"],
+                    "size": style["size"],
+                    "color": style["color"],
+                    "line": {"color": style["line"], "width": 1},
+                },
                 customdata=part["date_str"].to_numpy().reshape(-1, 1),
                 hovertext=part_hover,
                 hoverinfo="text",
             )
         )
+    low = float(view["low"].min())
+    high = float(view["high"].max())
+    pad = max((high - low) * 0.08, 1.0)
     figure.update_layout(
-        margin={"l": 8, "r": 16, "t": 36, "b": 8},
+        margin={"l": 64, "r": 18, "t": 42, "b": 36},
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0},
-        xaxis_rangeslider_visible=True,
         hovermode="closest",
         dragmode="pan",
         clickmode="event+select",
         font={"family": "Malgun Gothic, sans-serif"},
-        yaxis_title="가격",
-        xaxis_title="날짜",
-        height=680,
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#f7faf9",
+        height=640,
         uirevision="soxl",
-        hoverlabel={"font": {"family": "Malgun Gothic, sans-serif", "size": 14}},
+        hoverlabel={"font": {"family": "Malgun Gothic, sans-serif", "size": 14}, "bgcolor": "#ffffff"},
     )
-    figure.update_yaxes(automargin=True)
-    figure.update_xaxes(automargin=True, rangebreaks=[{"bounds": ["sat", "mon"]}])
+    figure.update_yaxes(
+        title="가격",
+        range=[low - pad, high + pad],
+        autorange=False,
+        fixedrange=True,
+        automargin=False,
+        showspikes=False,
+        gridcolor="#e4eeeb",
+        zeroline=False,
+    )
+    figure.update_xaxes(
+        title="날짜",
+        automargin=False,
+        showspikes=False,
+        rangebreaks=[{"bounds": ["sat", "mon"]}],
+        rangeslider={"visible": True, "thickness": 0.07, "borderwidth": 1},
+    )
     return figure
 
 
@@ -454,7 +476,11 @@ footer[data-testid="stFooter"] { display: none; }
     padding-right: 1.4rem;
   }
   .st-key-page_head [data-testid="stHorizontalBlock"] { align-items: center; }
-  .st-key-chart_row .js-plotly-plot { height: min(760px, max(640px, 70vh)) !important; }
+  .st-key-chart_row [data-testid="stPlotlyChart"] {
+    background: #ffffff;
+    border: 1px solid #d5e0dc;
+    border-radius: 16px;
+  }
   .st-key-chart_row [data-testid="stHorizontalBlock"] { align-items: flex-start; gap: 1.1rem; }
   .st-key-chart_row [data-testid="stColumn"]:last-child {
     position: sticky;
@@ -511,7 +537,11 @@ footer[data-testid="stFooter"] { display: none; }
   .day-lights { font-size: 1.05rem; }
   .day-lights th, .day-lights td { padding: 9px 4px; }
   .st-key-stats_row [data-testid="stMetricValue"] { font-size: 1.7rem; }
-  .st-key-chart_row .js-plotly-plot { height: min(560px, max(430px, 58vh)) !important; }
+  .st-key-chart_row [data-testid="stPlotlyChart"] {
+    background: #ffffff;
+    border: 1px solid #d5e0dc;
+    border-radius: 16px;
+  }
   .st-key-trades_desktop { display: none !important; }
   .st-key-trades_mobile { display: block !important; }
   h2 { font-size: 1.3rem !important; }
@@ -520,67 +550,20 @@ footer[data-testid="stFooter"] { display: none; }
 <script>
 (function () {
   function mobile() { return window.matchMedia("(max-width: 899px)").matches; }
-  function fitChart() {
+  function applyChart() {
+    var phone = mobile();
+    var mode = phone ? "m" : "d";
+    window.__soxlMode = mode;
     document.querySelectorAll(".js-plotly-plot").forEach(function (gd) {
-      if (!window.Plotly || !gd.layout || gd.dataset.soxlBusy === "1") return;
-      var phone = mobile();
-      var boxH = Math.round(gd.getBoundingClientRect().height);
-      if (!boxH) return;
-      var sliderOn = !phone;
-      var sliderNow = !(gd.layout.xaxis && gd.layout.xaxis.rangeslider && gd.layout.xaxis.rangeslider.visible === false);
-      var stamp = (phone ? "m" : "d") + ":" + boxH + ":" + (sliderOn ? "s" : "n");
-      var svg = gd.querySelector("svg.main-svg");
-      var svgH = svg ? Math.round(svg.getBoundingClientRect().height) : 0;
-      if (gd.dataset.soxlStamp === stamp && Math.abs(svgH - boxH) < 12 && sliderNow === sliderOn) return;
-      var attempt = Number(gd.dataset.soxlAttempt || "0");
-      if (attempt > 8) return;
-      gd.dataset.soxlBusy = "1";
-      gd.dataset.soxlAttempt = String(attempt + 1);
-      var stamps = [];
-      (gd.data || []).forEach(function (trace, index) {
-        if (trace.mode && String(trace.mode).indexOf("markers") >= 0) stamps.push(index);
-      });
+      if (!window.Plotly || !gd.layout || gd.dataset.soxlMode === mode) return;
+      gd.dataset.soxlMode = mode;
+      var bar = gd.querySelector(".modebar");
+      if (bar) bar.style.display = phone ? "none" : "";
+      if (!phone) return;
       window.Plotly.relayout(gd, {
-        height: boxH,
-        "xaxis.rangeslider.visible": sliderOn,
-        "legend.font.size": phone ? 13 : 12,
-        "xaxis.tickfont.size": phone ? 12 : 13,
-        "yaxis.tickfont.size": phone ? 12 : 13,
-        "hoverlabel.font.size": phone ? 15 : 14
-      }).then(function () {
-        var drawn = gd.querySelector("svg.main-svg");
-        var drawnH = drawn ? Math.round(drawn.getBoundingClientRect().height) : 0;
-        if (Math.abs(drawnH - boxH) < 12) {
-          gd.dataset.soxlStamp = stamp;
-          gd.dataset.soxlAttempt = "0";
-          [250, 700, 1400].forEach(function (delay) {
-            setTimeout(function () {
-              var again = gd.querySelector("svg.main-svg");
-              var againH = again ? Math.round(again.getBoundingClientRect().height) : 0;
-              if (Math.abs(againH - boxH) < 12) return;
-              delete gd.dataset.soxlStamp;
-              delete gd.dataset.soxlAttempt;
-              fit();
-            }, delay);
-          });
-        }
-        var bar = gd.querySelector(".modebar");
-        if (bar) bar.style.display = phone ? "none" : "";
-        if (!stamps.length) return null;
-        return window.Plotly.restyle(gd, {
-          "textfont.size": phone ? 14 : 12,
-          "marker.size": phone ? 16 : 13
-        }, stamps);
-      }).catch(function () {
-        delete gd.dataset.soxlStamp;
-      }).finally(function () {
-        delete gd.dataset.soxlBusy;
-        var drawn = gd.querySelector("svg.main-svg");
-        var drawnH = drawn ? Math.round(drawn.getBoundingClientRect().height) : 0;
-        if (Math.abs(drawnH - boxH) >= 12 && Number(gd.dataset.soxlAttempt || "0") <= 8) {
-          setTimeout(fit, 150);
-        }
-      });
+        height: 460,
+        "xaxis.rangeslider.visible": false
+      }).catch(function () { delete gd.dataset.soxlMode; });
     });
   }
   function fitWeeks() {
@@ -649,28 +632,38 @@ footer[data-testid="stFooter"] { display: none; }
       });
     });
   }
-  function fit() { fitChart(); fitWeeks(); syncWeekBars(); }
-  function schedule() {
-    clearTimeout(window.__soxlMut);
-    window.__soxlMut = setTimeout(fit, 60);
-  }
   if (window.__soxlOnResize) window.removeEventListener("resize", window.__soxlOnResize);
   window.__soxlOnResize = function () {
     clearTimeout(window.__soxlResize);
     window.__soxlResize = setTimeout(function () {
-        document.querySelectorAll(".js-plotly-plot").forEach(function (gd) {
-          delete gd.dataset.soxlStamp;
-          delete gd.dataset.soxlAttempt;
-        });
-      document.querySelectorAll(".trend-scroll").forEach(function (el) { delete el.dataset.soxlScrolled; });
-      fit();
-    }, 160);
+      var mode = mobile() ? "m" : "d";
+      if (window.__soxlMode !== mode) {
+        document.querySelectorAll(".js-plotly-plot").forEach(function (gd) { delete gd.dataset.soxlMode; });
+        applyChart();
+      }
+      syncWeekBars();
+    }, 200);
   };
   window.addEventListener("resize", window.__soxlOnResize);
-  if (window.__soxlObserver) window.__soxlObserver.disconnect();
-  window.__soxlObserver = new MutationObserver(schedule);
-  window.__soxlObserver.observe(document.body, {childList: true, subtree: true});
-  schedule();
+  if (window.__soxlObserver) {
+    window.__soxlObserver.disconnect();
+    window.__soxlObserver = null;
+  }
+  if (window.__soxlTimer) clearInterval(window.__soxlTimer);
+  var waits = 0;
+  window.__soxlTimer = setInterval(function () {
+    waits += 1;
+    if (document.querySelector(".js-plotly-plot") && window.Plotly) {
+      applyChart();
+      fitWeeks();
+      syncWeekBars();
+      clearInterval(window.__soxlTimer);
+      window.__soxlTimer = null;
+    } else if (waits > 30) {
+      clearInterval(window.__soxlTimer);
+      window.__soxlTimer = null;
+    }
+  }, 200);
 })();
 </script>
 """
@@ -758,9 +751,9 @@ def main() -> None:
                 theme=None,
                 key="soxl_chart",
                 config={
-                    "scrollZoom": True,
+                    "scrollZoom": False,
                     "displaylogo": False,
-                    "responsive": True,
+                    "responsive": False,
                     "modeBarButtonsToRemove": ["lasso2d", "select2d"],
                 },
             )
